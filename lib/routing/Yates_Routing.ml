@@ -31,3 +31,9 @@ module SemiMcf = SemiMcf
 module Spf = Spf
 
 module Vlb = Vlb
+
+module MagicRouting = MagicRouting
+
+module Helix = Helix
+
+module HelixNoOpti = Helix

@@ -15,10 +15,13 @@ let initialize (s:scheme) : unit =
 let local_recovery = normalization_recovery
 
 (* Keep headroom for unexpected traffic *)
-let max_util_cap = 0.8
+(*let max_util_cap = 0.8*)
+let max_util_cap = 1.0
 
 (* Threshold to tolerate over max utilization *)
-let max_thresh = 1.025
+(*let max_thresh = 1.025*)
+let max_thresh = 1.0
+
 
 (***********************************************)
 (* Tie-break algorithms *)

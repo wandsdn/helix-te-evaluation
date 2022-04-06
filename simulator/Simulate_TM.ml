@@ -11,6 +11,7 @@ open Yates_utils
 (* Simulate one traffic matrix and generate statistics *)
 (***********************************************************)
 
+
 (* Compute a routing scheme for an algorithm and apply budget by pruning the
    top-k paths. Also, round path weights if nbins is specified. *)
 let solve_within_budget algorithm topo predict actual : (scheme * float) =
@@ -18,12 +19,18 @@ let solve_within_budget algorithm topo predict actual : (scheme * float) =
   AutoTimer.start at;
   let solve = select_algorithm algorithm in
   let budget = !Yates_routing.Globals.budget in
-  let sch = match algorithm with
+
+  (* XXX: If we have a reactive TE algorithm solve with actual traffic *)
+  let sch = if is_react_te algorithm then
+      solve topo actual
+    else match algorithm with
     | OptimalMcf ->
       (* Use actual demands for Optimal, without any budget restriction *)
       solve topo actual
     | _ ->
         prune_scheme topo (solve topo predict) budget in
+  (* XXX: ------------------------ *)
+
   AutoTimer.stop at;
   let sch =
     match !Yates_routing.Globals.nbins with
@@ -297,6 +304,7 @@ let sum_sink_demands (d:demands) sink : float =
       if dst = sink then acc +. x
       else acc)
 
+
 (***********************************************************)
 (* Main function to simulate routing for one TM *)
 (***********************************************************)
@@ -358,12 +366,13 @@ let simulate_tm (start_scheme:scheme)
       delivered = SrcDstMap.empty;
       latency = SrcDstMap.empty;
       utilization = EdgeMap.empty;
+      tm_churn = 0.0;
       scheme = start_scheme;
       failures = EdgeSet.empty;
       failure_drop = 0.0;
       congestion_drop = 0.0;
       real_tm = dem;
-      predict_tm = predict } in
+      predict_tm = predict; } in
 
   let final_network_state =
     List.fold_left iterations
@@ -481,6 +490,7 @@ let simulate_tm (start_scheme:scheme)
                 else new_scheme
             else SrcDstMap.empty in
 
+
           (* Stop traffic generation after simulation end time *)
           let actual_t =
             if iter < (steady_state_time + num_iterations) then actual_t
@@ -500,6 +510,16 @@ let simulate_tm (start_scheme:scheme)
               ~init:EdgeMap.empty
               ~f:(fun acc (path_arr, dist, (prob,sd_demand)) ->
                   if Array.length path_arr = 0 then acc else
+                    (* XXX: Output the traffic scheduled on the host links *)
+                    (*let path_str = Array.fold path_arr
+                        ~init:("")
+                        ~f:(fun acc hop ->
+                          Printf.sprintf "%s %s" acc (string_of_edge topo hop)
+                        ) in
+                    Printf.printf "Host Traffic -> %d %s \n" iter path_str;
+                    *)
+                    (* XXX --------------------------------------------- *)
+
                     let first_link = path_arr.(0) in
                     let sched_traf_first_link =
                       match EdgeMap.find acc first_link with
@@ -507,6 +527,7 @@ let simulate_tm (start_scheme:scheme)
                       | Some v -> v in
                     let traf_first_link =
                       (path_arr, 1, (prob *. sd_demand))::sched_traf_first_link in
+
                     EdgeMap.set ~key:first_link ~data:traf_first_link acc) in
 
           (* if no (s-d) path, then entire demand is dropped due to failure *)
@@ -550,14 +571,15 @@ let simulate_tm (start_scheme:scheme)
                           if is_nan flow_dem then Printf.printf "flow_dem is nan!!\n";
                           link_dem +. flow_dem) in
 
-                  if local_debug then Printf.printf "%s: %f / %f\n%!"
+                  if local_debug then Printf.printf "[%d] %s: %f / %f\n%!" iter
                       (string_of_edge topo e) (demand_on_link /. 1e9)
                       (current_edge_capacity /. 1e9);
 
                   (* calculate each flow's fair share *)
                   let fs_in_queue_edge =
-                    if demand_on_link <= current_edge_capacity then
+                    if demand_on_link <= current_edge_capacity then begin
                       in_queue_edge
+                    end
                     else
                       fair_share_at_edge_arr current_edge_capacity in_queue_edge in
 
@@ -566,6 +588,12 @@ let simulate_tm (start_scheme:scheme)
                       ~init:0.0
                       ~f:(fun fwd_acc (_,_,flow_dem) -> fwd_acc +. flow_dem) in
                   let dropped = demand_on_link -. forwarded_by_link in
+
+                  (* XXX: If system uses reactive TE check if link is over-utilised *)
+                  if ((iter > 0) && (is_react_te algorithm)) then
+                    (react_te_check_congestion algorithm) topo e fs_in_queue_edge current_edge_capacity;
+                  (* XXX ------------------------------------------------- *)
+
 
                   let (_,_,_,curr_lutil_map,curr_fail_drop,curr_cong_drop) = link_iter_acc in
                   let new_fail_drop,new_cong_drop =
@@ -663,6 +691,22 @@ let simulate_tm (start_scheme:scheme)
                    new_cong_drop)) in
           (* Done forwarding for each link *)
 
+
+          (* XXX: If the system uses reactive TE resolve congestion if required *)
+          let new_scheme,tm_churn =
+            if ((iter > 0) && (is_react_te algorithm)) then begin
+              let ns = (react_te_optimise algorithm) topo actual_t in
+              if (SrcDstMap.is_empty ns) then
+                (new_scheme, 0.0)
+              else begin
+                (* Return the new scheme and return/compute path modification change churn *)
+                (ns, (get_churn new_scheme ns))
+              end
+            end
+            else
+                (new_scheme, 0.0) in
+          (* XXX ------------------------------------------------- *)
+
           (* Print state for debugging *)
           if local_debug then
             EdgeMap.iteri next_iter_traffic
@@ -683,6 +727,7 @@ let simulate_tm (start_scheme:scheme)
             delivered             = new_delivered_map;
             latency               = new_lat_tput_map_map;
             utilization           = new_link_utils;
+            tm_churn              = current_state.tm_churn +. tm_churn;
             scheme                = new_scheme;
             failures              = failed_links;
             failure_drop          = new_fail_drop;
@@ -693,6 +738,14 @@ let simulate_tm (start_scheme:scheme)
 
   agg_dem := !agg_dem /. (Float.of_int num_iterations);
   agg_sink_dem := !agg_sink_dem /. (Float.of_int num_iterations);
+
+
+  (* XXX: Get the reactive TE system stats for the iteration *)
+  let react_te_opti_success, react_te_opti_fail, react_te_opti_mctrl = (react_te_get_stats algorithm) () in
+  let react_ing_change_mctrl = (react_te_get_ing_change_stats algorithm) () in
+  (* XXX ---------------------------------------- *)
+
+
   (* Generate stats *)
   {
     throughput =
@@ -721,6 +774,8 @@ let simulate_tm (start_scheme:scheme)
     congestion_drop =
       final_network_state.congestion_drop /. (Float.of_int num_iterations) /. !agg_dem;
 
+    tm_churn = final_network_state.tm_churn;
+
     flash_throughput =
       if is_flash then SrcDstMap.fold final_network_state.delivered
           ~init:0.0
@@ -733,5 +788,9 @@ let simulate_tm (start_scheme:scheme)
     aggregate_demand = !agg_dem;
     recovery_churn = !recovery_churn;
     scheme = final_network_state.scheme;
-    solver_time = !solver_time; }
+    te_opti_success = react_te_opti_success;
+    te_opti_fail = react_te_opti_fail;
+    te_opti_mctrl = react_te_opti_mctrl;
+    ing_change_mctrl = react_ing_change_mctrl;
+    solver_time = !solver_time;}
 (* end simulate_tm *)

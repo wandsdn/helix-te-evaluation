@@ -12,7 +12,7 @@ type solver_type =
   | SemiMcfAc | SemiMcfEcmp | SemiMcfEdksp | SemiMcfKsp | SemiMcfKspFT
   | SemiMcfMcf | SemiMcfMcfEnv | SemiMcfMcfFTEnv | SemiMcfRaeke
   | SemiMcfRaekeFT | SemiMcfVlb
-  | OptimalMcf
+  | OptimalMcf | MagicRouting | Helix | HelixNoOpti | HelixMC
 
 (* TE system identifier *)
 let solver_to_string (s:solver_type) : string =
@@ -46,6 +46,10 @@ let solver_to_string (s:solver_type) : string =
   | Spf -> "spf"
   | Vlb -> "vlb"
   | OptimalMcf -> "optimalmcf"
+  | MagicRouting -> "magicrouting"
+  | Helix -> "Helix"
+  | HelixNoOpti -> "HelixNoOpti"
+  | HelixMC -> "HelixMC"
 
 (* TE system identifier reverse map *)
 let string_to_solver (s:string) : solver_type =
@@ -79,6 +83,10 @@ let string_to_solver (s:string) : solver_type =
   | "spf" -> Spf
   | "vlb" -> Vlb
   | "optimalmcf" -> OptimalMcf
+  | "magicrouting" -> MagicRouting
+  | "Helix" -> Helix
+  | "HelixNoOpti" -> HelixNoOpti
+  | "HelixMC" -> HelixMC
   | _ -> failwith (Printf.sprintf "Invalid solver type specified: %s" s)
 
 (* Return a brief summary of specified TE system *)
@@ -113,6 +121,10 @@ let solver_to_description (s:solver_type) : string =
   | Spf -> "Shortest paths first"
   | Vlb -> "Valiant Load Balancing"
   | OptimalMcf -> "Optimal multi-commodity flow based TE which doesn't have any operational constraints"
+  | MagicRouting -> "Scheme that performs packet teleportation from ingress to egress"
+  | Helix -> "Helix single-controller"
+  | HelixNoOpti -> "Helix single-controller without TE optimisation"
+  | HelixMC -> "Helix multi-controller"
 
 (* Select the rate adaptation method for a TE system *)
 let select_algorithm solver = match solver with
@@ -145,6 +157,10 @@ let select_algorithm solver = match solver with
   | SemiMcfVlb -> Yates_routing.SemiMcf.solve
   | Spf -> Yates_routing.Spf.solve
   | Vlb -> Yates_routing.Vlb.solve
+  | MagicRouting -> Yates_routing.MagicRouting.solve
+  | Helix
+  | HelixNoOpti -> Yates_routing.Helix.solve
+  | HelixMC -> Yates_routing.HelixMC.solve
 
 (* Select the local recovery method for a TE system *)
 let select_local_recovery solver = match solver with
@@ -177,6 +193,10 @@ let select_local_recovery solver = match solver with
   | SemiMcfVlb -> Yates_routing.SemiMcf.local_recovery
   | Spf -> Yates_routing.Spf.local_recovery
   | Vlb -> Yates_routing.Vlb.local_recovery
+  | MagicRouting -> Yates_routing.MagicRouting.local_recovery
+  | Helix
+  | HelixNoOpti -> Yates_routing.Helix.local_recovery
+  | HelixMC -> Yates_routing.HelixMC.local_recovery
 
 let demand_envelope = ref SrcDstMap.empty
 (* Compute the initial scheme for a TE algorithm *)
@@ -254,6 +274,10 @@ let initialize_scheme algorithm topo predict : unit =
   | SemiMcfRaekeFT
   | SemiMcfVlb -> Yates_routing.SemiMcf.initialize pruned_scheme
   | Vlb -> Yates_routing.Vlb.initialize SrcDstMap.empty
+  | MagicRouting -> Yates_routing.MagicRouting.initialize SrcDstMap.empty
+  | Helix
+  | HelixNoOpti -> Yates_routing.Helix.initialize SrcDstMap.empty
+  | HelixMC -> Yates_routing.HelixMC.initialize SrcDstMap.empty
   | _ -> ()
 
 (* Name and description of all supported TE systems *)
@@ -286,4 +310,84 @@ let all_solver_string_descripton : (string * string) list =
     (solver_to_string SemiMcfVlb, solver_to_description SemiMcfVlb) ;
     (solver_to_string Spf, solver_to_description Spf) ;
     (solver_to_string Vlb, solver_to_description Vlb) ;
+    (solver_to_string MagicRouting, solver_to_description MagicRouting) ;
+    (solver_to_string Helix, solver_to_description Helix);
+    (solver_to_string HelixNoOpti, solver_to_description HelixNoOpti);
+    (solver_to_string HelixMC, solver_to_description HelixMC);
     (solver_to_string OptimalMcf, solver_to_description OptimalMcf) ]
+
+
+
+(* Helper methods that handle reactive TE optimisations *)
+
+
+(* Check if the TE algorithm requires reactive TE integration *)
+let is_react_te algo =
+    ((algo = Helix) || (algo = HelixMC))
+
+(* Dummy method for non reactive TE algo to stop non match warnings *)
+let init_te_optimisation_dummy unit : unit =
+    ()
+
+let check_congestion_dummy (t:topology) (e:edge) (traf:(edge array * int * float) list) (c:float) : unit =
+    ()
+
+let resolve_congestion_dummy (t:topology) (d:demands) : scheme = 
+    SrcDstMap.empty
+
+let get_stats_dummy unit : (int * int * (helix_count_stats HelixCountStatsMap.t)) =
+    0, 0, HelixCountStatsMap.empty
+
+let get_ing_change_stats_dummy unit : (helix_count_stats HelixCountStatsMap.t) =
+    HelixCountStatsMap.empty
+
+let get_scheme_dummy unit : scheme =
+    SrcDstMap.empty
+
+let get_tm_churn_start_scheme_dummy unit : scheme =
+    SrcDstMap.empty
+
+
+(* Initiate reactive TE optimisation variables *)
+let react_te_init_optimisation algo = match algo with
+    | Helix -> Yates_routing.Helix.init_te_optimisation
+    | HelixMC -> Yates_routing.HelixMC.init_te_optimisation
+    | _ -> init_te_optimisation_dummy
+
+(* Check for link congestion with a reactive TE algorithm *)
+let react_te_check_congestion algo = match algo with
+    | Helix -> Yates_routing.Helix.check_congestion;
+    | HelixMC -> Yates_routing.HelixMC.check_congestion;
+    | _ -> check_congestion_dummy
+
+(* Check if we need to resolve congestion with a reactive TE algorithm *)
+let react_te_optimise algo = match algo with
+    | Helix -> Yates_routing.Helix.resolve_congestion;
+    | HelixMC -> Yates_routing.HelixMC.resolve_congestion;
+    | _ -> resolve_congestion_dummy
+
+(* Get the optimisation success/failure stats for a reactive TE system *)
+let react_te_get_stats algo = match algo with
+    | Helix -> Yates_routing.Helix.get_stats;
+    | HelixMC -> Yates_routing.HelixMC.get_stats;
+    | _ -> get_stats_dummy
+
+(* Get the ingress change success/failure stats for a reactive TE system *)
+let react_te_get_ing_change_stats algo = match algo with
+    | HelixMC -> Yates_routing.HelixMC.get_ing_change_stats;
+    | _ -> get_ing_change_stats_dummy
+
+(* Retrieve the routing scheme form a reactive TE algorithm *)
+let react_te_get_scheme algo = match algo with
+    | Helix -> Yates_routing.Helix.get_scheme;
+    | HelixMC -> Yates_routing.HelixMC.get_scheme;
+    | _ -> get_scheme_dummy
+
+(* Retrieve the TM churn initial scheme for a reactive TE system used to
+ * compute the adjustment which accounts for initial scheme recomputation
+ * for the reactive algorithms.
+ *)
+let react_te_get_tm_churn_start_scheme algo = match algo with
+    | Helix -> Yates_routing.Helix.get_tm_churn_start_scheme;
+    | HelixMC -> Yates_routing.HelixMC.get_tm_churn_start_scheme;
+    | _ -> get_tm_churn_start_scheme_dummy

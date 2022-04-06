@@ -126,3 +126,13 @@ type demands = demand SrcDstMap.t
 type scheme = flow_decomp SrcDstMap.t
 
 type configuration = (probability TagsMap.t) SrcDstMap.t
+
+(* Map that holds Helix multi-controller interface action success and failure
+ * count stats object
+ *)
+type helix_count_stats = {
+    success : int;
+    failure : int;
+}
+
+module HelixCountStatsMap = Map.Make(String)

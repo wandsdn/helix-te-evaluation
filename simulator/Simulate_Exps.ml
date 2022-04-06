@@ -28,7 +28,6 @@ let iter_vs_throughput_to_string (r:iter_vs_throughput) : string =
 
 type iter_vs_edge_congestions = { iteration : int ; edge_congestions : float EdgeMap.t; }
 
-
 let iter_vs_edge_congestions_to_string (topo:topology) (r:iter_vs_edge_congestions) : string =
   Printf.sprintf "%d\t" r.iteration ^
   EdgeMap.fold ~init:"" ~f:(fun ~key:e ~data:c acc -> acc ^ "\n\t\t" ^ "(" ^
@@ -45,4 +44,28 @@ let iter_vs_latency_percentiles_to_string (r:iter_vs_latency_percentiles) : stri
     ~f:(fun ~key:latency ~data:percentile acc ->
       acc ^ "\n\t\t" ^ string_of_float latency ^ " : " ^ string_of_float percentile)
 
+(* Helix TE optimisation success and failure totals *)
+type iter_vs_te_opti_count = { iteration: int ; te_opti_success : int; te_opti_fail : int; }
 
+let iter_vs_te_opti_count_to_string (r:iter_vs_te_opti_count) : string =
+  Printf.sprintf "%d\t%d\t%d" r.iteration r.te_opti_success r.te_opti_fail
+
+(* Helix Multi-Controller TE optimisation success and failures *)
+type iter_vs_mctrl_te_opti_count = { iteration: int ;
+            te_opti: helix_count_stats HelixCountStatsMap.t }
+
+let iter_vs_mctrl_te_opti_count_to_string (r:iter_vs_mctrl_te_opti_count) : string =
+  Printf.sprintf "%d\t" r.iteration ^
+  HelixCountStatsMap.fold r.te_opti ~init:("") ~f:(fun ~key:(cid) ~data:(c) acc ->
+    acc ^ (Printf.sprintf "\n\t\t(%s) : %d\t%d" cid c.success c.failure)
+  )
+
+(* Helix multi-controller ingress change success and failure *)
+type iter_vs_mctrl_ing_change_count = { iteration: int ;
+            ing_change: helix_count_stats HelixCountStatsMap.t }
+
+let iter_vs_mctrl_ing_change_count_to_string (r:iter_vs_mctrl_ing_change_count) : string =
+  Printf.sprintf "%d\t" r.iteration ^
+  HelixCountStatsMap.fold r.ing_change ~init:("") ~f:(fun ~key:(cid) ~data:(c) acc ->
+    acc ^ (Printf.sprintf "\n\t\t(%s) : %d\t%d" cid c.success c.failure)
+  )

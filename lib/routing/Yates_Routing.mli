@@ -31,3 +31,7 @@ module SemiMcf : Algorithm
 module Spf : Algorithm
 
 module Vlb : Algorithm
+
+module Helix : Algorithm
+
+module HelixNoOpti : Algorithm

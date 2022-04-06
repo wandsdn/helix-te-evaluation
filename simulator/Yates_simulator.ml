@@ -261,6 +261,9 @@ let simulate
   let total_sink_tput_data = make_data "Total Sink Throughput vs Time" in
   let failure_drop_data = make_data "Drop due to failure vs Time" in
   let congestion_drop_data = make_data "Drop due to congestion vs Time" in
+  let te_opti_count_data = make_data "Helix TE Optimisation Count Vs Time" in
+  let mctrl_te_opti_data = make_data "Helix Multi-Controller TE Optimisation Count Vs Time" in
+  let mctrl_ing_change_data = make_data "Helix Multi-Controller Ingress Change Count Vs Time" in
   let percentiles = [0.1; 0.2; 0.3; 0.4; 0.5; 0.6; 0.7; 0.8; 0.9; 0.95] in
   let create_percentile_data (metric:string) =
     List.fold_left
@@ -319,6 +322,12 @@ let simulate
               (calculate_demand_envelope topo predict_file host_file num_tms);
         | _ -> (););
 
+
+      (* XXX: Initiate the reactive TE optimisation procedure *)
+      if is_react_te algorithm then
+        (react_te_init_optimisation algorithm) ();
+      (* XXX -------------------------------------------- *)
+
       let (actual_host_map, actual_ic) = open_demands demand_file host_file topo in
       let (predict_host_map, predict_ic) = open_demands predict_file host_file topo in
       Printf.printf "\n";
@@ -335,12 +344,56 @@ let simulate
             let actual = next_demand ~scale:scale actual_ic actual_host_map in
             let predict = next_demand ~scale:scale predict_ic predict_host_map in
 
+            (*
+            (* Dump the actual traffic matrix requested by the host *)
+            Printf.printf "\nActual TE: \n";
+            let tmp = ref "" in
+            SrcDstMap.iteri actual
+              ~f:(fun ~key:(a,b) ~data:(matrix) ->
+                  let aName = (Node.name (Topology.vertex_to_label topo a)) in
+                  if not (!tmp = "") && not (aName = !tmp) then
+                  begin
+                    Printf.printf "\n";
+                    tmp := aName;
+                  end
+                  else
+                    tmp := aName;
+                    Printf.printf "%-3s-%3s: %-10.0f "
+                      (Node.name (Topology.vertex_to_label topo a))
+                      (Node.name (Topology.vertex_to_label topo b)) matrix;
+               );
+            Printf.printf "\n\n";
+            *)
+
             (* initialize algorithm *)
             if n = 0 then initialize_scheme algorithm topo predict;
+
+
+            (* XXX: Get the old scheme from the reactive TE system to compute
+             * the path change churn adjustment taking into account path
+             * recomputations
+             *)
+            let tmp_s = (react_te_get_tm_churn_start_scheme algorithm) () in
+            (* XXX ------------------------------------------------- *)
+
 
             (* solve *)
             let scheme,solver_time = solve_within_budget algorithm topo predict actual in
             ignore(reset_topo_weights edge_weights topo;);
+
+
+            (* XXX: If algo is reactive TE capable compute the initial path
+             * computation tm churn
+             *)
+            let adj_tm_churn =
+              if (is_react_te algorithm) then
+                get_churn tmp_s scheme
+              else
+                0.0
+            in
+            (*Printf.printf "PC ADJ: %f\n" adj_tm_churn;*)
+            (* XXX ------------------------------------------------- *)
+
 
             (* Print paths *)
             store_paths log_paths scheme topo abs_out_dir algorithm n;
@@ -376,7 +429,17 @@ let simulate
             let max_congestions_map = EdgeMap.map ~f:snd tm_sim_stats.congestion in
             let sorted_congestions = List.sort ~compare:(Float.compare) list_of_max_congestions in
             let total_solver_time = solver_time +. tm_sim_stats.solver_time in
-            let tm_churn = get_churn prev_scheme scheme in
+
+            (* XXX: If the algo is reactive TE capable get TM churn from simulation stats *)
+            let tm_churn =
+              if (is_react_te algorithm) then
+                (tm_sim_stats.tm_churn +. adj_tm_churn)
+              else
+                get_churn prev_scheme scheme
+            in
+            (*Printf.printf "TM CHURN: %f\n\n" tm_churn;*)
+            (* XXX ------------------------------------------------- *)
+
             let num_paths = get_num_paths scheme in
             let cmax = get_max_congestion list_of_max_congestions in
             let cmean = get_mean_congestion list_of_avg_congestions in
@@ -423,6 +486,13 @@ let simulate
               {iteration = n; throughput=tm_sim_stats.failure_drop; throughput_dev=0.0; };
             add_record congestion_drop_data sname
               {iteration = n; throughput=tm_sim_stats.congestion_drop; throughput_dev=0.0; };
+            add_record te_opti_count_data sname
+              {iteration = n; te_opti_success=tm_sim_stats.te_opti_success;
+               te_opti_fail=tm_sim_stats.te_opti_fail};
+            add_record mctrl_te_opti_data sname
+              {iteration = n; te_opti=tm_sim_stats.te_opti_mctrl};
+            add_record mctrl_ing_change_data sname
+              {iteration = n; ing_change=tm_sim_stats.ing_change_mctrl};
             List.iter2_exn
               percentile_data (percentile_values sorted_congestions)
               ~f:(fun d v ->
@@ -435,6 +505,13 @@ let simulate
                   {iteration = n; congestion=v; congestion_dev=0.0;});
 
           scheme) in
+
+      (* XXX: If reactive TE algorithm output the final paths at end of simulation *)
+      if is_react_te algorithm then begin
+        let s = (react_te_get_scheme algorithm) () in
+        store_paths log_paths s topo abs_out_dir algorithm num_tms;
+      end;
+      (* XXX: --------------------- *)
 
       (* start at beginning of demands for next algorithm *)
       close_demands actual_ic;
@@ -470,6 +547,12 @@ let simulate
     "# solver\titer\tedge-exp-congestion" (iter_vs_edge_congestions_to_string topo);
   to_file abs_out_dir "LatencyDistributionVsIterations.dat" latency_percentiles_data
     "#solver\titer\tlatency-throughput" iter_vs_latency_percentiles_to_string;
+  to_file abs_out_dir "HelixOptiTECountVsIterations.dat" te_opti_count_data
+    "# solver\titer\tsuccess_count\tfail_count" iter_vs_te_opti_count_to_string;
+  to_file abs_out_dir "HelixMCTEOptiCountVsIterations.dat" mctrl_te_opti_data
+    "# solver\titer\tcid\tsuccess_count\tfail_count" iter_vs_mctrl_te_opti_count_to_string;
+  to_file abs_out_dir "HelixMCIngChangeCountVsIterations.dat" mctrl_ing_change_data
+    "# solver\titer\tcid\tsuccess_count\tfail_count" iter_vs_mctrl_ing_change_count_to_string;
   List.iter2_exn
     percentile_data percentiles
     ~f:(fun d p ->
@@ -633,6 +716,10 @@ let command =
     +> flag "-semimcfvlb" no_arg ~doc:(" run semi mcf+vlb : " ^ solver_to_description SemiMcfVlb)
     +> flag "-spf" no_arg ~doc:(" run spf : " ^ solver_to_description Spf)
     +> flag "-vlb" no_arg ~doc:(" run vlb : " ^ solver_to_description Vlb)
+    +> flag "-magicrouting" no_arg ~doc:(" run magicrouting : " ^ solver_to_description MagicRouting)
+    +> flag "-helix" no_arg ~doc:(" run Helix : " ^ solver_to_description Helix)
+    +> flag "-helixNoOpti" no_arg ~doc:(" run HelixNoOpti : " ^ solver_to_description HelixNoOpti)
+    +> flag "-helixMC" no_arg ~doc:(" run HelixMC : " ^ solver_to_description HelixMC)
     +> flag "-all" no_arg ~doc:" run all schemes"
     +> flag "-keep-loops" no_arg ~doc:" keep loops in paths"
     +> flag "-limittest" no_arg ~doc:" test at what scale factor for demand matrices does atleast one link is saturated"
@@ -664,6 +751,15 @@ let command =
     +> flag "-subgraph" (optional string) ~doc:" file with a subset of switches (the induced subgraph will be used for analysis) "
     +> flag "-gurobi-method" (optional_with_default (-1) int)
       ~doc:" solver method used for Gurobi. -1=automatic, 0=primal simplex, 1=dual simplex, 2=barrier, 3=concurrent, 4=deterministic concurrent."
+    +> flag "-helix-te-thresh" (optional_with_default 0.80 float) ~doc:" Helix te optimisation threshold"
+    +> flag "-helix-te-opti-wait" (optional_with_default 20 int) ~doc:" Helix te optimisation wait timeout"
+    +> flag "-helix-poll-wait" (optional_with_default 5 int) ~doc:" Helix link stats poll inverval timeout"
+    +> flag "-helix-recomp-scheme" no_arg ~doc: " re-compute the routing scheme for each new iteration with Helix algo."
+    +> flag "-helix-sw-ctrl-map-file" (optional_with_default "" string) ~doc:" Helix switch-to-controller map file for multi-controller execution"
+    +> flag "-helix-te-opti-method" (optional_with_default "FirstSol" string) ~doc:" Helix TE optimisation method: FirstSol (default), BestSolUsage, BestSolPLen, CSPFRecomp"
+    +> flag "-helix-te-candidate-sort-rev" (optional_with_default true bool) ~doc:" Helix TE sort candidates in descending order (true, default) or ascending (false)"
+    +> flag "-helix-te-pot-path-sort-rev" (optional_with_default false bool) ~doc:" Helix TE sort pot paths in reverse order. Only applies to some methods"
+    +> flag "-helix-te-paccept" (optional_with_default false bool) ~doc:" Helix accept partial solutions. Only applies to some optimisation methods"
     +> anon ("topology-file" %: string)
     +> anon ("demand-file" %: string)
     +> anon ("predict-file" %: string)
@@ -698,6 +794,10 @@ let command =
       (semimcfvlb:bool)
       (spf:bool)
       (vlb:bool)
+      (magicrouting:bool)
+      (helix:bool)
+      (helixNoOpti:bool)
+      (helixMC:bool)
       (all:bool)
       (keep_loops:bool)
       (limittest:bool)
@@ -725,6 +825,15 @@ let command =
       (rtt_file:string option)
       (subgraph_file:string option)
       (grb_method:int)
+      (helix_te_thresh:float)
+      (helix_te_opti_wait:int)
+      (helix_poll_wait:int)
+      (helix_recomp_scheme:bool)
+      (helix_sw_ctrl_map_file:string)
+      (helix_te_opti_method:string)
+      (helix_te_candidate_sort_rev:bool)
+      (helix_te_pot_path_sort_rev:bool)
+      (helix_te_paccept:bool)
       (topology_file:string)
       (demand_file:string)
       (predict_file:string)
@@ -754,12 +863,17 @@ let command =
           ; if semimcfkspft            then Some SemiMcfKspFT    else None
           ; if semimcfmcf              then Some SemiMcfMcf  else None
           ; if semimcfmcfenv || all    then Some SemiMcfMcfEnv   else None
-          ; if semimcfmcfftenv || all  then Some SemiMcfMcfFTEnv else None
-          ; if semimcfraeke || all     then Some SemiMcfRaeke    else None
-          ; if semimcfraekeft || all   then Some SemiMcfRaekeFT  else None
+          (*; if semimcfmcfftenv || all  then Some SemiMcfMcfFTEnv else None !!! BROKEN, ASSERTION ERROR *)
+          (*; if semimcfraeke || all     then Some SemiMcfRaeke    else None !!! BROKEN *)
+          (*; if semimcfraekeft || all   then Some SemiMcfRaekeFT  else None !!! BROKEN *)
           ; if semimcfvlb || all       then Some SemiMcfVlb      else None
           ; if spf || all        then Some Spf         else None
-          ; if vlb || all        then Some Vlb         else None ] in
+          ; if vlb || all        then Some Vlb         else None
+          ; if magicrouting || all      then Some MagicRouting      else None
+          ; if helix || all        then Some Helix         else None
+          ; if helixMC || all      then Some HelixMC        else None
+          ; if helixNoOpti || all      then Some HelixNoOpti        else None ] in
+
 
       (* Set global configs first *)
       ExperimentalData.append_out := appendout;
@@ -776,9 +890,23 @@ let command =
       Yates_routing.Globals.global_recovery_delay := gr_delay;
       Yates_routing.Globals.ffc_max_link_failures :=
         max fail_num !(Yates_routing.Globals.ffc_max_link_failures);
+
+      (* Set global Helix config variables *)
+      Yates_routing.Globals.helix_te_thresh := helix_te_thresh;
+      Yates_routing.Globals.helix_te_opti_wait := helix_te_opti_wait;
+      Yates_routing.Globals.helix_poll_wait := helix_poll_wait;
+      Yates_routing.Globals.helix_recomp_scheme := helix_recomp_scheme;
+      Yates_routing.Globals.helix_sw_ctrl_map_file := helix_sw_ctrl_map_file;
+
+      Yates_routing.Globals.helix_te_opti_method := helix_te_opti_method;
+      Yates_routing.Globals.helix_te_candidate_sort_rev := helix_te_candidate_sort_rev;
+      Yates_routing.Globals.helix_te_pot_path_sort_rev := helix_te_pot_path_sort_rev;
+      Yates_routing.Globals.helix_te_paccept := helix_te_paccept;
+
       try
         if robust then
           Yates_routing.Globals.failure_time  := 0;
+
 
         (* Compute scaling factor *)
         let syn_scale =
@@ -786,7 +914,7 @@ let command =
             calculate_syn_scale topology_file subgraph_file demand_file host_file
           else 1.0 in
         let tot_scale = scale *. syn_scale in
-        (* Printf.printf "Scale factor: %f\n\n" tot_scale; *)
+        Printf.printf "Scale factor: %f\n\n" tot_scale;
 
         if limittest then
           compare_scaling_limit algorithms num_tms topology_file subgraph_file
@@ -802,6 +930,7 @@ let command =
       with _ as e ->
         begin
           Format.printf "The following exception occured:\n %s\n" (Exn.to_string e);
+          Printexc.print_backtrace stderr;
           exit 1
         end)
 

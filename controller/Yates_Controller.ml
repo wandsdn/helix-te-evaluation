@@ -38,6 +38,11 @@ let main algo topo_fn actual_fn predicted_fn hosts_fn src_routing () =
   | SemiMcfVlb -> let module C = Controller.Make(SemiMcf) in C.start topo_fn actual_fn hosts_fn algo src_routing ()
   | Spf -> let module C = Controller.Make(Spf) in C.start topo_fn actual_fn hosts_fn algo src_routing ()
   | Vlb -> let module C = Controller.Make(Vlb) in C.start topo_fn actual_fn hosts_fn algo src_routing ()
+  | MagicRouting -> let module C = Controller.Make(MagicRouting) in C.start topo_fn actual_fn hosts_fn algo src_routing ()
+  | Helix
+  | HelixNoOpti -> let module C = Controller.Make(Helix) in C.start topo_fn actual_fn hosts_fn algo 
+src_routing ()
+  | HelixMC -> let module C = Controller.Make(HelixMC) in C.start topo_fn actual_fn hosts_fn algo src_routing ()
 
 let yates_main_cmd =
   Command.basic_spec
