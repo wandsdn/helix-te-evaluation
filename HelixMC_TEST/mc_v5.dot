@@ -1,0 +1,88 @@
+digraph topology {
+
+s01[type=switch,id=1,mac="20:00:00:00:00:01",ip="192.168.1.3"];
+s02[type=switch,id=2,mac="20:00:00:00:00:02",ip="192.168.1.3"];
+s03[type=switch,id=3,mac="20:00:00:00:00:03",ip="192.168.1.3"];
+
+s04[type=switch,id=4,mac="20:00:00:00:00:04",ip="192.168.1.3"];
+s05[type=switch,id=5,mac="20:00:00:00:00:05",ip="192.168.1.3"];
+s06[type=switch,id=6,mac="20:00:00:00:00:06",ip="192.168.1.3"];
+s07[type=switch,id=7,mac="20:00:00:00:00:07",ip="192.168.1.3"];
+
+s08[type=switch,id=8,mac="20:00:00:00:00:08",ip="192.168.1.3"];
+s09[type=switch,id=9,mac="20:00:00:00:00:09",ip="192.168.1.3"];
+
+s10[type=switch,id=10,mac="20:00:00:00:00:10",ip="192.168.1.3"];
+s11[type=switch,id=11,mac="20:00:00:00:00:11",ip="192.168.1.3"];
+s12[type=switch,id=12,mac="20:00:00:00:00:12",ip="192.168.1.3"];
+
+s13[type=switch,id=13,mac="20:00:00:00:00:13",ip="192.168.1.3"];
+s14[type=switch,id=14,mac="20:00:00:00:00:14",ip="192.168.1.3"];
+s15[type=switch,id=15,mac="20:00:00:00:00:15",ip="192.168.1.3"];
+
+h1[type=host,mac="00:00:00:00:00:01",ip="10.0.0.1"];
+h2[type=host,mac="00:00:00:00:00:02",ip="10.0.0.2"];
+h8[type=host,mac="00:00:00:00:00:03",ip="10.0.0.3"];
+
+s01 -> s02 [src_port=2, dst_port=2, cost=0, capacity="1Gbps"];
+s01 -> s03 [src_port=3, dst_port=1, cost=0, capacity="1Gbps"];
+s02 -> s01 [src_port=2, dst_port=2, cost=0, capacity="1Gbps"];
+s02 -> s03 [src_port=3, dst_port=2, cost=0, capacity="1Gbps"];
+s03 -> s01 [src_port=1, dst_port=3, cost=0, capacity="1Gbps"];
+s03 -> s02 [src_port=2, dst_port=3, cost=0, capacity="1Gbps"];
+
+s04 -> s05 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+s04 -> s06 [src_port=2, dst_port=1, cost=0, capacity="1Gbps"];
+s05 -> s04 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+s05 -> s06 [src_port=2, dst_port=2, cost=0, capacity="1Gbps"];
+s05 -> s07 [src_port=3, dst_port=1, cost=0, capacity="1Gbps"];
+s06 -> s04 [src_port=1, dst_port=2, cost=0, capacity="1Gbps"];
+s06 -> s05 [src_port=2, dst_port=2, cost=0, capacity="1Gbps"];
+s07 -> s05 [src_port=1, dst_port=3, cost=0, capacity="1Gbps"];
+
+s08 -> s09 [src_port=2, dst_port=1, cost=0, capacity="1Gbps"];
+s09 -> s08 [src_port=1, dst_port=2, cost=0, capacity="1Gbps"];
+
+s10 -> s11 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+s10 -> s12 [src_port=2, dst_port=1, cost=0, capacity="1Gbps"];
+s11 -> s10 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+s11 -> s12 [src_port=2, dst_port=2, cost=0, capacity="1Gbps"];
+s12 -> s10 [src_port=2, dst_port=1, cost=0, capacity="1Gbps"];
+s12 -> s11 [src_port=2, dst_port=2, cost=0, capacity="1Gbps"];
+
+s13 -> s14 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+s13 -> s15 [src_port=2, dst_port=1, cost=0, capacity="1Gbps"];
+s14 -> s13 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+s14 -> s15 [src_port=2, dst_port=2, cost=0, capacity="1Gbps"];
+s15 -> s13 [src_port=1, dst_port=2, cost=0, capacity="1Gbps"];
+s15 -> s14 [src_port=2, dst_port=2, cost=0, capacity="1Gbps"];
+
+
+h1 -> s01 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+s01 -> h1 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+h2 -> s02 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+s02 -> h2 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+h8 -> s08 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+s08 -> h8 [src_port=1, dst_port=1, cost=0, capacity="1Gbps"];
+
+
+s02 -> s04 [src_port=4, dst_port=3, cost=0, capacity="100Mbps"];
+s02 -> s06 [src_port=5, dst_port=3, cost=0, capacity="500Mbps"];
+s04 -> s02 [src_port=3, dst_port=4, cost=0, capacity="100Mbps"];
+s06 -> s02 [src_port=3, dst_port=5, cost=0, capacity="500Mbps"];
+s02 -> s10 [src_port=6, dst_port=3, cost=0, capacity="500Mbps"];
+s10 -> s02 [src_port=3, dst_port=6, cost=0, capacity="500Mbps"];
+s02 -> s13 [src_port=7, dst_port=3, cost=0, capacity="300Mbps"];
+s13 -> s02 [src_port=3, dst_port=7, cost=0, capacity="300Mbps"];
+
+s05 -> s08 [src_port=4, dst_port=3, cost=0, capacity="200Mbps"];
+s07 -> s09 [src_port=2, dst_port=2, cost=0, capacity="300Mbps"];
+s08 -> s05 [src_port=3, dst_port=4, cost=0, capacity="200Mbps"];
+s09 -> s07 [src_port=2, dst_port=2, cost=0, capacity="300Mbps"];
+
+s12 -> s14 [src_port=3, dst_port=3, cost=0, capacity="1Gbps"];
+s14 -> s12 [src_port=3, dst_port=3, cost=0, capacity="1Gbps"];
+s15 -> s09 [src_port=3, dst_port=3, cost=0, capacity="1Gbps"];
+s09 -> s15 [src_port=3, dst_port=3, cost=0, capacity="1Gbps"];
+
+}

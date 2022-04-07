@@ -47,9 +47,9 @@ let solver_to_string (s:solver_type) : string =
   | Vlb -> "vlb"
   | OptimalMcf -> "optimalmcf"
   | MagicRouting -> "magicrouting"
-  | Helix -> "Helix"
-  | HelixNoOpti -> "HelixNoOpti"
-  | HelixMC -> "HelixMC"
+  | Helix -> "helix"
+  | HelixNoOpti -> "helixNoOpti"
+  | HelixMC -> "helixMC"
 
 (* TE system identifier reverse map *)
 let string_to_solver (s:string) : solver_type =

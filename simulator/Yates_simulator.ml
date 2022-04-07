@@ -751,15 +751,15 @@ let command =
     +> flag "-subgraph" (optional string) ~doc:" file with a subset of switches (the induced subgraph will be used for analysis) "
     +> flag "-gurobi-method" (optional_with_default (-1) int)
       ~doc:" solver method used for Gurobi. -1=automatic, 0=primal simplex, 1=dual simplex, 2=barrier, 3=concurrent, 4=deterministic concurrent."
-    +> flag "-helix-te-thresh" (optional_with_default 0.80 float) ~doc:" Helix te optimisation threshold"
-    +> flag "-helix-te-opti-wait" (optional_with_default 20 int) ~doc:" Helix te optimisation wait timeout"
-    +> flag "-helix-poll-wait" (optional_with_default 5 int) ~doc:" Helix link stats poll inverval timeout"
+    +> flag "-helix-te-thresh" (optional_with_default 0.95 float) ~doc:" Helix te optimisation threshold"
+    +> flag "-helix-te-opti-wait" (optional_with_default 1 int) ~doc:" Helix te optimisation wait timeout"
+    +> flag "-helix-poll-wait" (optional_with_default 100 int) ~doc:" Helix link stats poll inverval timeout"
     +> flag "-helix-recomp-scheme" no_arg ~doc: " re-compute the routing scheme for each new iteration with Helix algo."
     +> flag "-helix-sw-ctrl-map-file" (optional_with_default "" string) ~doc:" Helix switch-to-controller map file for multi-controller execution"
-    +> flag "-helix-te-opti-method" (optional_with_default "FirstSol" string) ~doc:" Helix TE optimisation method: FirstSol (default), BestSolUsage, BestSolPLen, CSPFRecomp"
+    +> flag "-helix-te-opti-method" (optional_with_default "CSPFRecomp" string) ~doc:" Helix TE optimisation method: CSPFRecomp (default), FirstSol (default), BestSolUsage, BestSolPLen"
     +> flag "-helix-te-candidate-sort-rev" (optional_with_default true bool) ~doc:" Helix TE sort candidates in descending order (true, default) or ascending (false)"
     +> flag "-helix-te-pot-path-sort-rev" (optional_with_default false bool) ~doc:" Helix TE sort pot paths in reverse order. Only applies to some methods"
-    +> flag "-helix-te-paccept" (optional_with_default false bool) ~doc:" Helix accept partial solutions. Only applies to some optimisation methods"
+    +> flag "-helix-te-paccept" (optional_with_default true bool) ~doc:" Helix accept partial solutions. Only applies to some optimisation methods"
     +> anon ("topology-file" %: string)
     +> anon ("demand-file" %: string)
     +> anon ("predict-file" %: string)
